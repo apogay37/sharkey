@@ -627,7 +627,16 @@ window.Favorites = {
                 //if(Store.get('favorites.show_on_new', true)) that.show();
 				if(Store.get('styling.favorites.minimized', true)) that.newItems();
             }else {
-                that.setNextCheck(that.current, current.last_interval * window.config.favorites.interval_multiplier);
+                let next_check = current.last_interval * window.config.favorites.interval_multiplier;
+                // фикс последствий бага, повредившего избранное куче людей 11.09.2021
+                // если последний пост в избранном выше текущего в треде, то сбросить его
+                // либо это багованный пост из архива, либо последний пост удалили (что не страшно)
+                if(current.last_post > res.last_post) {
+                    console.log(`(!!!)Обнаружен багованный тред в избранном #${that.current}. Чиним и обновляем чреез минуту`);
+                    Store.set('favorites.' + that.current + '.last_post', res.last_post);
+                    next_check = 1; // Проверим через минуту
+                }
+                that.setNextCheck(that.current, next_check);
             }
 			
 			that.unlock();
@@ -1443,7 +1452,7 @@ window.MMisc = (function () {
                 var posts = [];
                 try {
                     var parsed = JSON.parse(data);
-                
+                    let last_post = 0;
 
                     if(page == -1) {
                     	var all_posts = parsed['threads'][0]['posts'];
@@ -1458,7 +1467,8 @@ window.MMisc = (function () {
 	                    for(var i=0; i < all_posts.length; i++) {
 	                        var post = all_posts[i];
 	                        if(post.num >= from_post) posts.push(post);
-	                        
+	                        if(post.num > last_post) last_post = post.num;
+
 	                        //удаляем посты из копии памяти, которые пришли с сервера
 	                        //если что-то осталось, значит на сервере его уже нет, значит его удалили
 	                        var all_posts_pos = known_posts.indexOf(post.num);
@@ -1479,7 +1489,7 @@ window.MMisc = (function () {
 		                    that.setThread(thread).setJSON(posts[i]);
 		                }
 		                console.timeEnd('fillMap');
-		                callback({updated: posts.length, data:posts, favorites: all_posts[0]['favorites'], deleted: known_posts});
+		                callback({updated: posts.length, data:posts, favorites: all_posts[0]['favorites'], deleted: known_posts, last_post});
                     } else {
                     	//var tmpost = Post(1);
 		                var data = parsed['threads'];
@@ -1932,7 +1942,7 @@ Stage('Наполнение карты постов',                'mapfill', 
         },
         _postLoad: function() {
         	//@postLoad
-            if(!_.isArch()) Favorites.init();
+            Favorites.init();
             var hash = window.location.hash.substr(1);
             if(hash && !isNaN(hash)) {
                if(Post(hash).exists() && !Post(hash).isThread()) Post(hash).highlight();
