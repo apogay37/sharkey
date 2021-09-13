@@ -18,7 +18,10 @@ if(e&&1===a.nodeType)while(c=e[d++])a.removeAttribute(c)}}),hb={set:function(a,b
 
     window.config.loadCaptchaTimeout = 30000; //таймаут в миллисекундах функции загрузки капчи
     window.config.updatePostsTimeout = 30000; //таймаут в миллисекундах функции загрузки новых постов с сервера
-    window.config.autoUpdate.minInterval = 15; //Минимальный интервал между обновлениями в секундах
+    window.config.downloadPostsAttempts = 3;  //количество попыток fetchPosts() в случае ошибки
+    window.config.downloadPostsInterval = 5000;  //интервал между попытками fetchPosts() в случае ошибки
+    window.config.autoUpdate.focusedInterval = 15; //интервал между обновлениями в секундах для вкладки в фокусе
+    window.config.autoUpdate.blurredInterval = 35; //интервал между обновлениями в секундах для вкладки НЕ в фокусе
     window.config.autoUpdate.faviconDefault = '<link id="favicon" rel="shortcut icon" href="/favicon.ico"/>'; //Дефолтная иконка
     window.config.autoUpdate.faviconNewposts = '<link id="favicon" rel="shortcut icon" href="/makaba/templates/img/favicon_newposts.ico"/>'; //Иконка для оповещения о новых постах
     window.config.autoUpdate.faviconDeleted = '<link id="favicon" rel="shortcut icon" href="/makaba/templates/img/favicon_deleted.ico"/>'; //Иконка для оповещения о удалённом треде
@@ -1413,7 +1416,7 @@ window.MMisc = (function () {
 
             return html;
         },
-        fetchPosts: function(param, callback) {
+        fetchPosts: function(param, callback, attempt = 1) {
             //@param
             //from
             //thread
@@ -1428,27 +1431,40 @@ window.MMisc = (function () {
             var page = -1;
             var that = this;
 
+            // Защита от двойного вызова коллбека
+            let completed = false;
+            let complete = (obj) => {
+              if(completed) return;
+              completed = true;
+              clearTimeout(timeoutTimer);
+              callback(obj);
+            };
+            // Защита от зависания запроса
+            let timeoutTimer = setTimeout(() => {
+                if(completed) return;
+                completed = true;
+                return complete({error:'server', errorText: 'Таймаут ответа', errorCode: -2});
+            }, window.config.updatePostsTimeout+1000);
+
             if(param['update']) {
-            	console.log('update params here');
             	post = posts[this.num];
                 var _thread = posts[post.thread];
                 from_post = _thread.preloaded ? _thread.preloaded+1 : post.thread;
                 thread = post.thread;
                 board = window.thread.board;
             }else if (param['page']) {
-            	console.log('page params here');
             	page = param['page'];
             	board = param['board'];
             	//render = true;
             } else {
-            	console.log('init thread load params here');
                 from_post = param['from_post'];
                 thread = param['thread'];
                 board = param['board'];
                 //render = true;
             }
             var onsuccess = function( data ) {
-                if(data.hasOwnProperty('Error')) return callback({error:'server', errorText:'API ' + data.Error + '(' + data.Code + ')', errorCode:data.Code});
+                if(completed) return;
+                if(data.hasOwnProperty('Error')) return complete({error:'server', errorText:'API ' + data.Error + '(' + data.Code + ')', errorCode:data.Code});
                 var posts = [];
                 try {
                     var parsed = JSON.parse(data);
@@ -1483,13 +1499,11 @@ window.MMisc = (function () {
 	                    //c тпмпост мы создает отдельные экземляр поста который перебираем, изначальный пост this с номером не меняется.
 	                    //а меняя that используем изначальный экземпляр, так удобнее, нужно держать в голове что при переборе итоговый num у Post изменится на номер последнего поста в треде
 	                    //var tmpost = Post(1);
-	                    console.time('fillMap');
 		                for(var i = 0; i < posts.length; i++) {
 		                    that.num = posts[i].num;
 		                    that.setThread(thread).setJSON(posts[i]);
 		                }
-		                console.timeEnd('fillMap');
-		                callback({updated: posts.length, data:posts, favorites: all_posts[0]['favorites'], deleted: known_posts, last_post});
+                        complete({updated: posts.length, data:posts, favorites: all_posts[0]['favorites'], deleted: known_posts, last_post});
                     } else {
                     	//var tmpost = Post(1);
 		                var data = parsed['threads'];
@@ -1502,31 +1516,42 @@ window.MMisc = (function () {
 		                    }
 		                }
 
-		                if(!parsed) return callback({fail_to_fetch: true});
-                		if(!parsed.threads || !parsed.threads.length) return callback({no_more_threads: true});
-                		callback(parsed.threads);
+		                if(!parsed) return complete({fail_to_fetch: true});
+                		if(!parsed.threads || !parsed.threads.length) return complete({no_more_threads: true});
+                        complete(parsed.threads);
                     }
                     
                 }catch(e){
-                	console.log(e);
-                    return callback({error:'server', errorText: 'Ошибка парсинга ответа сервера', errorCode: -1});
+                	console.log(e + e.stack);
+                    return complete({error:'server', errorText: 'Ошибка парсинга ответа сервера', errorCode: -1});
                 }
                 //
                 //if(param.update) that._findRemovedPosts();                    
             };
 
             var onerror = function(jqXHR, textStatus) {
-                if(jqXHR.status == 404) return callback({error:'server', errorText: 'Тред не найден', errorCode: -404});
-                if(jqXHR.status == 0) return callback({error:'server', errorText: 'Браузер отменил запрос (' + textStatus + ')', errorCode: 0});
-                callback({error:'http', errorText:textStatus, errorCode: jqXHR.status});
+                if(completed) return;
+                attempt++;
+                // Защита от случайного 404 чтоб не помечать тред удалённым сразу, а пару раз перепроверить
+                if(attempt <= window.config.downloadPostsAttempts) {
+                    setTimeout(() => {
+                        console.log(`Re-trying fetchPosts() attempt ${attempt}/${window.config.downloadPostsAttempts}` +
+                            ` due to error. jqXHR.status=${jqXHR.status}, textStatus=${textStatus}`);
+                        that.fetchPosts(param, complete, attempt);
+                    }, window.config.downloadPostsInterval);
+                }else{
+                    if(jqXHR.status == 404) return complete({error:'server', errorText: 'Тред не найден', errorCode: -404});
+                    if(jqXHR.status == 0) return complete({error:'server', errorText: 'Браузер отменил запрос (' + textStatus + ')', errorCode: 0});
+                    complete({error:'http', errorText:textStatus, errorCode: jqXHR.status});
+                }
             };
 
             //$.ajax( '/' + board + (page == -1 ? '/res/' + thread : '/' + page) + '.json', {
             $.ajax(page == -1 ? _.threadJson(board, thread) : _.pageJson(board, page), {
                 dataType: 'html',
                 timeout: window.config.updatePostsTimeout,
-                success: onsuccess,
-                error: onerror
+                success: a => { try { onsuccess(a) } catch(e) { console.log(e+e.stack); complete({error:'client', errorText: 'Обшибка ajax.success', errorCode: -2}) } },
+                error: (a, b) => { try { onerror(a, b) } catch(e) { console.log(e+e.stack); complete({error:'client', errorText: 'Обшибка ajax.error', errorCode: -3}) } }
             });
 
             return this;
@@ -2142,11 +2167,15 @@ Stage('Наполнение карты постов',                'mapfill', 
             this.updatePosts(function(data) {
                 $close($id('alert-wait'));
 
-                if(data.updated) $alert('Новых постов: ' + data.updated);
-                else if(data.error) $alert('Ошибка: ' + data.errorText);
-                else $alert('Нет новых постов');
+                if(data.updated) {
+                    $alert('Новых постов: ' + data.updated);
+                    if(Favorites.isFavorited(window.thread.id)) Favorites.setLastPost(data.data, window.thread.id);
+                } else if(data.error) {
+                    $alert('Ошибка: ' + data.errorText);
+                } else {
+                    $alert('Нет новых постов');
+                }
 
-                if(Favorites.isFavorited(window.thread.id)) Favorites.setLastPost(data.data, window.thread.id);
             });
         },
         updatePosts: function(callback) {
@@ -2160,7 +2189,6 @@ Stage('Наполнение карты постов',                'mapfill', 
                 var tmpost = Post(1);
                 var origHeight = window.pageYOffset;
                 //удаление постов
-                console.log(data.deleted);
                 if(data.deleted) {
                     for(var i=0;i<data.deleted.length;i++) {
                     	todel += '#post-' + data.deleted[i] + ', ';
@@ -2171,7 +2199,6 @@ Stage('Наполнение карты постов',                'mapfill', 
                 var origAfterDelHeight = window.pageYOffset;
                 var afterDelDiff = origHeight - origAfterDelHeight;
                 //window.scrollBy(0, -afterDelDiff);
-                console.log('Пришло ' + data.data.length + ' новых постов');
                 //render
                 that._append(data.data);
                 //var updHeight = window.pageYOffset;
@@ -3813,17 +3840,18 @@ Stage('Загрузка автообновления',                'autorefre
     var isWindowFocused = true;
     $(window).blur(function(){
         isWindowFocused = false;
-        MAutoUpdate.setNewTimeout(35);
+        MAutoUpdate.setUpdateInterval(window.config.autoUpdate.blurredInterval);
         MAutoUpdate.reposRedLine();
     });
     $(window).focus(function(){
         isWindowFocused = true;
         //if(MAutoUpdate.newPosts.length) $(window).scroll();
+        MAutoUpdate.setUpdateInterval(window.config.autoUpdate.focusedInterval);
         if(!$('.autorefresh-checkbox').is(':checked')) return;
     });
 
     window.MAutoUpdate = (function () {
-    	var _timeout = window.config.autoUpdate.minInterval;
+    	var _timeout = document.hasFocus() ? window.config.autoUpdate.focusedInterval : window.config.autoUpdate.blurredInterval;
     	var _remain = 0;
     	var _currentIcon;
     	var newPosts = [];
@@ -3874,7 +3902,6 @@ Stage('Загрузка автообновления',                'autorefre
 		            $autorefresh_el.html(' выполняется...');
 
 		            PostF.updatePosts(function(data){
-		            	console.log(data);
 		                if(data.error) {
 		                    if(data.error == 'server' && data.errorCode == -404) return threadDeleted();
 		                    $alert('Ошибка автообновления: ' + data.errorText);
@@ -3886,9 +3913,9 @@ Stage('Загрузка автообновления',                'autorefre
 		                        }
 		                        that.reposRedLine();
 		                    }
-		                    _remain = _timeout;
 		                    if(Favorites.isFavorited(window.thread.id)) Favorites.setLastPost(data.data, window.thread.id);
 		                }
+                        _remain = _timeout;
 		            });
 
 		        }, 1000);
@@ -3904,11 +3931,18 @@ Stage('Загрузка автообновления',                'autorefre
 		        clearInterval(this.interval);
 		        $('.autorefresh-countdown').html('');
 	    	},
-	    	setNewTimeout: function(newTimeout) {
-	    		if (newTimeout < 0) _remain = _timeout;
-		        _remain = newTimeout;
-		        $('.autorefresh-countdown').html('через ' + _remain);
-    		},
+            setNewTimeout: function(newTimeout) {
+                if (newTimeout < 0) _remain = _timeout;
+                _remain = newTimeout;
+                $('.autorefresh-countdown').html('через ' + _remain);
+            },
+            setUpdateInterval: function(newInterval) {
+                _timeout = newInterval;
+                if(_remain > _timeout) {
+                    _remain = _timeout;
+                    MAutoUpdate.setNewTimeout(_remain);
+                }
+            },
     		reposRedLine: function() {
 	    		var $line = $('.post_type_last');
 		        if($line.length) $line.removeClass('post_type_last');
