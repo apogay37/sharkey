@@ -129,7 +129,7 @@ const _ = {
     	return location.pathname.split(/\//)[2] == 'arch';
     },
     threadJson(board, num) {
-	    return _.isArch() ?
+	    return (_.isArch() && board == CFG.BOARD.NAME && num == CFG.BOARD.THREADID) ?
 	        location.pathname.split('.').slice(0, 1).concat('json').join('.') :
 	        `/${board}/res/${num}.json`;
 	},
@@ -630,6 +630,7 @@ window.Favorites = {
                 //if(Store.get('favorites.show_on_new', true)) that.show();
 				if(Store.get('styling.favorites.minimized', true)) that.newItems();
             }else {
+                //that.setNextCheck(that.current, current.last_interval * window.config.favorites.interval_multiplier);
                 let next_check = current.last_interval * window.config.favorites.interval_multiplier;
                 // фикс последствий бага, повредившего избранное куче людей 11.09.2021
                 // если последний пост в избранном выше текущего в треде, то сбросить его
@@ -1463,11 +1464,12 @@ window.MMisc = (function () {
                 //render = true;
             }
             var onsuccess = function( data ) {
-                if(completed) return;
+            	if(completed) return;
                 if(data.hasOwnProperty('Error')) return complete({error:'server', errorText:'API ' + data.Error + '(' + data.Code + ')', errorCode:data.Code});
                 var posts = [];
                 try {
                     var parsed = JSON.parse(data);
+                
                     let last_post = 0;
 
                     if(page == -1) {
@@ -1483,8 +1485,9 @@ window.MMisc = (function () {
 	                    for(var i=0; i < all_posts.length; i++) {
 	                        var post = all_posts[i];
 	                        if(post.num >= from_post) posts.push(post);
-	                        if(post.num > last_post) last_post = post.num;
 
+	                        if(post.num > last_post) last_post = post.num;
+	                        
 	                        //удаляем посты из копии памяти, которые пришли с сервера
 	                        //если что-то осталось, значит на сервере его уже нет, значит его удалили
 	                        var all_posts_pos = known_posts.indexOf(post.num);
@@ -1503,7 +1506,7 @@ window.MMisc = (function () {
 		                    that.num = posts[i].num;
 		                    that.setThread(thread).setJSON(posts[i]);
 		                }
-                        complete({updated: posts.length, data:posts, favorites: all_posts[0]['favorites'], deleted: known_posts, last_post});
+		                complete({updated: posts.length, data:posts, favorites: all_posts[0]['favorites'], deleted: known_posts, last_post});
                     } else {
                     	//var tmpost = Post(1);
 		                var data = parsed['threads'];
@@ -2068,9 +2071,9 @@ Stage('Наполнение карты постов',                'mapfill', 
         _renderReplies: function(data, render) {
         	var tmpost = Post(1);
         	var replyhtml = '';
-        	console.log('render replies for static loaded posts :/');
+        	//console.log('render replies for static loaded posts');
         	
-        	console.time('_renderReplies');
+        	//console.time('_renderReplies');
         	for (var i = 0; i < data.length; i++) {
         		tmpost.num = data[i].num;
         		if(render) tmpost.raw().rendered = true;
@@ -2083,7 +2086,7 @@ Stage('Наполнение карты постов',                'mapfill', 
 	            	}
         		}
         	}
-		    console.timeEnd('_renderReplies');
+		    //console.timeEnd('_renderReplies');
         },
         loadPage: function(page, render) {
             var tmpost = Post(1);
@@ -2192,13 +2195,11 @@ Stage('Наполнение карты постов',                'mapfill', 
                 if(data.deleted) {
                     for(var i=0;i<data.deleted.length;i++) {
                     	todel += '#post-' + data.deleted[i] + ', ';
-                        //$('#post-' + data.deleted[i]).remove();
                     }
                     $(todel.slice(0, -2)).remove();
                 }
                 var origAfterDelHeight = window.pageYOffset;
                 var afterDelDiff = origHeight - origAfterDelHeight;
-                //window.scrollBy(0, -afterDelDiff);
                 //render
                 that._append(data.data);
                 //var updHeight = window.pageYOffset;
@@ -3845,7 +3846,6 @@ Stage('Загрузка автообновления',                'autorefre
     });
     $(window).focus(function(){
         isWindowFocused = true;
-        //if(MAutoUpdate.newPosts.length) $(window).scroll();
         MAutoUpdate.setUpdateInterval(window.config.autoUpdate.focusedInterval);
         if(!$('.autorefresh-checkbox').is(':checked')) return;
     });
@@ -3915,7 +3915,7 @@ Stage('Загрузка автообновления',                'autorefre
 		                    }
 		                    if(Favorites.isFavorited(window.thread.id)) Favorites.setLastPost(data.data, window.thread.id);
 		                }
-                        _remain = _timeout;
+		              	_remain = _timeout;
 		            });
 
 		        }, 1000);
@@ -3931,7 +3931,7 @@ Stage('Загрузка автообновления',                'autorefre
 		        clearInterval(this.interval);
 		        $('.autorefresh-countdown').html('');
 	    	},
-            setNewTimeout: function(newTimeout) {
+	    	setNewTimeout: function(newTimeout) {
                 if (newTimeout < 0) _remain = _timeout;
                 _remain = newTimeout;
                 $('.autorefresh-countdown').html('через ' + _remain);
@@ -7016,7 +7016,7 @@ class MediaViewer {
 	static openYoutube(html, obj) {
 	    const main    = _.newTempl('<div class="mv__main" id="js-mv-main"><div class="mv__meta"></div></div>');
     	MediaViewer.container.appendChild(main);
-		const w = '90'; //vw
+		const w = '80'; //vw
 		const title = Store.get('_cache.media.' + obj.type + '.' + obj.id + '.title');
   		const wpx = CFG.W_WIDTH*w/100;
   		const hpx = wpx*9/16;
@@ -7037,10 +7037,12 @@ MediaViewer.Init = function () {
 	$('body').append(MediaViewer.container);
 	document.addEventListener('click', (e) => {
 		if(e.target && (e.target.matches('.post__file-preview'))) { //click on preview
+			console.time('openmedia');
 			let p = e.target.id;
 			//check if small mobile screen and open media in a new tab
 			if(CFG.ISMOBILE && CFG.MOBILE_DONT_EXPAND) return window.open(MEDIABYID.get(p).src,'_blank');
-			MEDIABYID.get(p).show()
+			MEDIABYID.get(p).show();
+			console.timeEnd('openmedia');
 		} else {
 			if(MediaObject.viewer && e.button === 0) {
 				if(MediaObject.viewer == 'youtube') {
