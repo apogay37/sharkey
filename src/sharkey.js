@@ -16,7 +16,8 @@ if(e&&1===a.nodeType)while(c=e[d++])a.removeAttribute(c)}}),hb={set:function(a,b
     window.thread = {}; //область хранения переменных/данных о треде
     window.threadstats = {}; //настройки популярных тредов
 
-    window.config.loadCaptchaTimeout = 30000; //таймаут в миллисекундах функции загрузки капчи
+    window.config.captchaLoadTimeout = 30000; //таймаут в миллисекундах функции загрузки капчи
+    window.config.captcha2chTTL = 60; //таймаут в секундах жизни 2ch капчи
     window.config.updatePostsTimeout = 30000; //таймаут в миллисекундах функции загрузки новых постов с сервера
     window.config.downloadPostsAttempts = 3;  //количество попыток fetchPosts() в случае ошибки
     window.config.downloadPostsInterval = 5000;  //интервал между попытками fetchPosts() в случае ошибки
@@ -2620,13 +2621,12 @@ Stage('Переключение стилей',                    'styleswitch',
 Stage('Управление капчей',                      'captcha',      Stage.DOMREADY,     function(){
     //Store.set('other.captcha_provider','2chaptcha')
     //if(Store.get('other.captcha_provider','google') == 'google') {
-        window.requestCaptchaKey = window.requestCaptchaKey2ch;
-        window.loadCaptcha = window.loadCaptcha2ch;
+    //  window.requestCaptchaKey = window.requestCaptchaKeyGoogle;
+    //  window.loadCaptcha = window.loadCaptchaGoogle;
     //    return;
     //}
     // if(Store.get('other.captcha_provider','google') == '2chaptcha') {
-    //     window.requestCaptchaKey = window.requestCaptchaKey2ch;
-    //     window.loadCaptcha = window.loadCaptcha2ch;
+         window.loadCaptcha = window.loadCaptcha2ch;
     //     return;
     // }
 
@@ -4960,15 +4960,15 @@ Stage('Юзеропции',                              'settings',     Stage.D
         label: 'Коррекция часового пояса',
         default: true
     });
-    Settings.addSetting('other',        'other.captcha_provider', {
-        label: 'Капча',
-        multi: true,
-        values: [ 
-            ['google', 'google'],
-            ['2chaptcha', '2chaptcha'],
-        ],
-        default: 'google'
-    });
+    // Settings.addSetting('other',        'other.captcha_provider', {
+    //     label: 'Капча',
+    //     multi: true,
+    //     values: [
+    //         ['google', 'google'],
+    //         ['2chaptcha', '2chaptcha'],
+    //     ],
+    //     default: 'google'
+    // });
     Settings.addSetting('other',        'other.navigation', {
         label: 'Бесконечная прокрутка',
         multi: true,
@@ -5784,7 +5784,7 @@ function requestCaptchaKeyGoogle(callback) {
     var abortTimer = setTimeout(function(){ //если не дождались ответа, отменяем
         abort = true;
         if(callback) callback('Превышен интервал ожидания');
-    }, window.config.loadCaptchaTimeout);
+    }, window.config.сaptchaLoadTimeout);
 
     $.get(url, function( data ) {
         if(abort) return false; //слишком долго думал, уже не нужен.
@@ -5839,47 +5839,105 @@ function loadCaptchaGoogle() {
     });
 }
 
-function requestCaptchaKey2ch(callback) {
+class Captcha2ch {
+    constructor() {
+        this.TTL = 0; // Время до конца жизни капчи в секундах
+        this.busy = false;
 
-    var userCode = getCookie('passcode_auth');
-	
-    var url;
-	url = '/api/captcha/2chcaptcha/id';
-    var abort = false;
+        setInterval(()=>this.tickTTL(), 1000);
 
-    $.get(url, function( data ) {
-        if(abort) return false;
-        //clearTimeout(abortTimer);
+        $('head').append('<style type="text/css">' +
+            '.captchaImageBox {\n' +
+            '  display: inline-block;\n' +
+            '  width: 270px;\n' +
+            '  height: 120px;\n' +
+            '  position: relative;\n' +
+            '}\n' +
+            '.captchaImageTimer {\n' +
+            '  position: absolute;\n' +
+            '  right: 0; bottom: 0;\n' +
+            '  font-family: monospace;\n' +
+            '  font-size: 16px;\n' +
+            '  font-weight: bold;\n' +
+            '  padding: 3px;\n' +
+            '  color: #777;\n' +
+            '}\n' +
+            '.captchaImageReloadBtn, .captchaImageLoadingMessage {\n' +
+            '  position: absolute;\n' +
+            '  right: 50%; top: 50%;\n' +
+            '  transform: translate(50%, -50%);\n' +
+            '  font-family: monospace;\n' +
+            '  font-size: 30px;\n' +
+            '  font-weight: bold;\n' +
+            '  padding: 3px;\n' +
+            '  text-align: center;\n' +
+            '  cursor: pointer;\n' +
+            '}\n' +
+            '</style>');
+    }
 
-		if(data['warning']) return callback({ warning: data['warning']});
-		else if(data['banned']) return callback({ banned: data['banned']});
-        else if(data['result'] == 0) return callback('VIPFAIL');
-        else if(data['result'] == 2) return callback('VIP');
-        else if(data['result'] == 3) return callback('DISABLED');
-        else if(data['result'] == 1) return callback({key: data['id']});
-        else return callback(data);
-    })
-        .fail(function(jqXHR, textStatus) {
-            if(callback) callback(textStatus);
-        });
-}
-function loadCaptcha2ch() {
-    requestCaptchaKey(function(data){
+    // Загрузить новую капчу
+    loadCaptcha() {
+        this.requestCaptchaKey();
+    }
+
+    requestCaptchaKey() {
+        let url = '/api/captcha/2chcaptcha/id';
+        let abort = false;
+
+        if(this.busy) return;
+        this.busy = true;
+
+        let abortTimer = setTimeout(() => {
+            this.busy = false;
+            abort = true;
+            this.renderCaptcha('Таймаут');
+        },  window.config.captchaLoadTimeout);
+
+        this.renderLoadingMessage();
+
+        $.get(url, ( data ) => {
+            if(abort) return;
+            this.busy = false;
+            clearTimeout(abortTimer);
+
+            if(data['warning']) return this.renderCaptcha({ warning: data['warning']});
+            else if(data['banned']) return this.renderCaptcha({ banned: data['banned']});
+            else if(data['result'] == 0) return this.renderCaptcha('VIPFAIL');
+            else if(data['result'] == 2) return this.renderCaptcha('VIP');
+            else if(data['result'] == 3) return this.renderCaptcha('DISABLED');
+            else if(data['result'] == 1) return this.renderCaptcha({key: data['id']});
+            else return this.renderCaptcha(data);
+        })
+            .fail((jqXHR, textStatus) => {
+                if(abort) return;
+                this.busy = false;
+                this.renderCaptcha(textStatus);
+            });
+    }
+
+    renderLoadingMessage() {
+        $('.captcha__image').html('<div class="captchaImageBox">\n' +
+            '<span class="captchaImageLoadingMessage">Загрузка...</span>\n' +
+            '</div>');
+    }
+
+    renderCaptcha(data) {
         if(!data.key) {
-			if(data.warning) {
-				generateWarning('warning', data.warning, function() {
-					$("#warningponyal").click(function(){
-						$.get('/api/captcha/message', function() {
-							loadCaptcha();
-						})
-						return false;
-					});
-				});
-			}else if(data.banned) {
-				generateWarning('banned', data.banned, function() {
-					delCookie('op_' + window.board + '_' + window.thread.id); //??WTF
-				}); 
-			}else if(data == 'VIP') {
+            if(data.warning) {
+                generateWarning('warning', data.warning, function() {
+                    $("#warningponyal").click(function(){
+                        $.get('/api/captcha/message', function() {
+                            loadCaptcha();
+                        })
+                        return false;
+                    });
+                });
+            }else if(data.banned) {
+                generateWarning('banned', data.banned, function() {
+                    delCookie('op_' + window.board + '_' + window.thread.id); //??WTF
+                });
+            }else if(data == 'VIP') {
                 $('.captcha').html('Вы - пасскодобоярин.');
                 Store.set('renewneeded',0);
             }else if(data == 'VIPFAIL') {
@@ -5889,14 +5947,49 @@ function loadCaptcha2ch() {
                 $('.captcha').html('');
                 $('.captcha').hide();
             }else{
-                $('.captcha__image').html(data);
+                $('.captcha__image').html('<div class="captchaImageBox">\n' +
+                    'Ошибка: ' + data +
+                    '<button class="captchaImageReloadBtn">Обновить</button>\n' + // В принципе на кнопке не нужен обработчик, он уже есть на .captcha__image
+                    '</div>');
             }
         }else{
-            $('.captcha__image').html('<img src="/api/captcha/2chcaptcha/show?id=' + data.key + '">');
             $('.captcha__key').val(data.key);
             $('.captcha__val').val('');
+            $('.captcha__image').html('<div class="captchaImageBox">\n' +
+                '<img src="/api/captcha/2chcaptcha/show?id=' + data.key +'">\n' +
+                '<span class="captchaImageTimer" style="display:none">60</span>\n' +
+                '<button class="captchaImageReloadBtn" style="display:none">Обновить</button>\n' + // В принципе на кнопке не нужен обработчик, он уже есть на .captcha__image
+                '</div>');
+            this.resetTTL();
         }
-    });
+    }
+
+    renderTTL(remain) {
+        if(remain == 0) {
+            $('.captchaImageTimer').hide();
+            $('.captchaImageReloadBtn').show();
+        }else{
+            $('.captchaImageTimer').text(this.TTL);
+        }
+    }
+
+    resetTTL() {
+        this.TTL = window.config.captcha2chTTL;
+        $('.captchaImageTimer').show();
+        this.renderTTL();
+    }
+
+    tickTTL() {
+        if(this.TTL < 0) return;
+        this.TTL--;
+        this.renderTTL(this.TTL);
+    }
+}
+
+function loadCaptcha2ch() {
+    // Создаём инстанс 2ch капчи, только если в настройках выбрана 2ch капча, иначе таймер будет просто так тикать
+    if(!window.catcha2chInstance) window.catcha2chInstance = new Captcha2ch();
+    window.catcha2chInstance.loadCaptcha();
 }
 
 
