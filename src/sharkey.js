@@ -5844,8 +5844,6 @@ class Captcha2ch {
         this.TTL = 0; // Время до конца жизни капчи в секундах
         this.busy = false;
 
-        setInterval(()=>this.tickTTL(), 1000);
-
         $('head').append('<style type="text/css">' +
             '.captchaImageBox {\n' +
             '  display: inline-block;\n' +
@@ -5906,7 +5904,7 @@ class Captcha2ch {
             else if(data['result'] == 0) return this.renderCaptcha('VIPFAIL');
             else if(data['result'] == 2) return this.renderCaptcha('VIP');
             else if(data['result'] == 3) return this.renderCaptcha('DISABLED');
-            else if(data['result'] == 1) return this.renderCaptcha({key: data['id']});
+            else if(data['result'] == 1) return this.preloadCaptcha({key: data['id']}); //this.renderCaptcha({key: data['id']});
             else return this.renderCaptcha(data);
         })
             .fail((jqXHR, textStatus) => {
@@ -5914,6 +5912,41 @@ class Captcha2ch {
                 this.busy = false;
                 this.renderCaptcha(textStatus);
             });
+    }
+
+    // Пытаемся загрузить картинку капчи за 3 секунды, если нет, то отдаём как есть. Будет грузиться как на дайлапе сверху вниз
+    preloadCaptcha(data) {
+        this.busy = true;
+        let done = false;
+        let start = (+new Date);
+
+        this.resetTTL();
+        let timeout = setTimeout(() => {
+            done = true;
+            this.busy = false;
+            this.renderCaptcha(data)
+        }, 3000);
+
+        let $img = $('<img>');
+        $img.one('load', () => {
+            if(done) return;
+            clearTimeout(timeout);
+
+            // Eсли загрузится быстрее 500мс, то подождать чтоб надпись загрузки успела повисеть для красоты
+            let wait = 500;
+            let end = (+new Date);
+            let delta = end-start;
+            if(delta < wait) {
+                setTimeout(() => {
+                        this.busy = false;
+                        this.renderCaptcha(data);
+                    }, wait-delta);
+            }else{
+                this.busy = false;
+                this.renderCaptcha(data);
+            }
+        });
+        $img.attr('src', '/api/captcha/2chcaptcha/show?id=' + data.key);
     }
 
     renderLoadingMessage() {
@@ -5960,7 +5993,7 @@ class Captcha2ch {
                 '<span class="captchaImageTimer" style="display:none">60</span>\n' +
                 '<button class="captchaImageReloadBtn" style="display:none">Обновить</button>\n' + // В принципе на кнопке не нужен обработчик, он уже есть на .captcha__image
                 '</div>');
-            this.resetTTL();
+            this.showTTL();
         }
     }
 
@@ -5973,16 +6006,24 @@ class Captcha2ch {
         }
     }
 
+    showTTL() {
+        $('.captchaImageTimer').show();
+        this.renderTTL(this.TTL);
+    }
+
     resetTTL() {
         this.TTL = window.config.captcha2chTTL;
-        $('.captchaImageTimer').show();
-        this.renderTTL();
+        if(this.TTLinterval) clearInterval(this.TTLinterval);
+        this.TTLinterval = setInterval(()=>this.tickTTL(), 1000);
     }
 
     tickTTL() {
-        if(this.TTL < 0) return;
         this.TTL--;
         this.renderTTL(this.TTL);
+        if(this.TTL == 0) {
+            clearInterval(this.TTLinterval);
+            this.TTLinterval = null;
+        }
     }
 }
 
