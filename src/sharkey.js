@@ -691,6 +691,7 @@ window.Favorites = {
         if(!this.busy) this.reset();
     },
     deleted: function(num) {
+        if(!this.isFavorited(num)) return; // удалять уже нечего
         //favorites.deleted_behavior int 0-не удалять, 1-удалять сразу, 2-проверять перед удалением
         var behavior = Store.get('favorites.deleted_behavior', 2);
         var path = 'favorites.' + num + '.deleted';
