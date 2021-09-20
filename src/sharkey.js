@@ -525,17 +525,25 @@ window.Favorites = {
         this.current = null;
         var favlist = Store.get('favorites', {});
         var del_behavior = Store.get('favorites.deleted_behavior', 2);
+        const bugged = [];
 
         for(var key in favlist) {
             if(!favlist.hasOwnProperty(key)) continue;
             if(key == window.thread.id) continue;
-            if(!favlist[key].hasOwnProperty('next_check')) continue;
+            if(!favlist[key].hasOwnProperty('next_check')) continue; // для favorites.deleted_behavior и других настроек
+            if(this._isBugged(favlist[key])) {bugged.push(key);continue;}
             if(this.isLocked(key)) continue;
 
             if(!this.current || favlist[this.current].next_check > favlist[key].next_check) {
                 if(favlist[key].deleted && del_behavior == 0) continue;
                 this.current = key;
             }
+        }
+
+        // Странный баг, при котором треды предращаются в {deleted: true, new_posts: 0, next_check: 1631898692, last_interval: 600} без раздела и постов
+        for (let i = 0; i < bugged.length; i++) {
+            console.log(`(!!!)Удаление забагованного треда избранного #${bugged[i]}`);
+            this.remove(bugged[i]);
         }
     },
 
@@ -777,6 +785,11 @@ window.Favorites = {
         for(var key in favlist) {
             console.log(key + ':' + Math.round(favlist[key].next_check-((+new Date)/1000)) + 's');
         }
+    },
+    // Странный баг, при котором треды предращаются в {deleted: true, new_posts: 0, next_check: 1631898692, last_interval: 600} без раздела и постов
+    _isBugged: function(thread) {
+        if(!thread.last_post) return true;
+        if(!thread.board) return true;
     },
     renderAllItems: function() {
     	var favorites = Store.get("favorites");
