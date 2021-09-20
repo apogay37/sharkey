@@ -5924,6 +5924,7 @@ class Captcha2ch {
             .fail((jqXHR, textStatus) => {
                 if(abort) return;
                 this.busy = false;
+                clearTimeout(abortTimer);
                 this.renderCaptcha(textStatus);
             });
     }
