@@ -5285,36 +5285,69 @@ Stage('Юзеропции',                              'settings',     Stage.D
         Settings.toggle();
         return false;
     });
-    $('#settings-btn-close').click(function(){
+    $('#settings-btn-close,#qr-settings-window-close').click(function(){
         Settings.hide();
         return false;
     });
     $('#settings-btn-export').click(function(){
-        var myWindow = window.open("", "JSON Settings", '_blank');
-        myWindow.document.write('<textarea style="width:100%; height:100%;">' + escapeHTML(Store.export()) + '</textarea>');
-        myWindow.focus();
-
-        //var data = Store.export();
-        //var url = 'data:text/json;charset=utf8,' + encodeURIComponent(data);
-        //window.open(url, '_blank');
-        //window.focus();
-        //prompt('Скопируйте и сохраните', Store.export());
-    });
-    $('#settings-btn-import').click(function(){
-        var json = prompt('Вставьте сохранённые настройки');
-        if(!json) return;
-
-        try {
-            JSON.parse(json);
-        }catch(e){
-            return $alert('Неверный формат');
+        // https://stackoverflow.com/questions/2897619/using-html5-javascript-to-generate-and-save-a-file
+        const download = (filename, text) => {
+            var pom = document.createElement('a');
+            pom.setAttribute('href', 'data:application/json;charset=utf-8,' + encodeURIComponent(text));
+            pom.setAttribute('download', filename);
+            if (document.createEvent) {
+                var event = document.createEvent('MouseEvents');
+                event.initEvent('click', true, true);
+                pom.dispatchEvent(event);
+            }
+            else {
+                pom.click();
+            }
         }
 
-        localStorage.store = json;
+        const d = new Date();
+        const month = ('' + (d.getMonth() + 1)).padStart(2, '0');
+        const day = ('' + d.getDate()).padStart(2, '0');
+        const year = d.getFullYear();
+        const filename = `2ch settings ${day}.${month}.${year}.json`;
 
-        Store.reload();
-        Settings.hide();
-        $alert('Для применения настроек обновите страницу');
+        download(filename, Store.export());
+    });
+    $('#settings-btn-import').click(function(){
+        var pom = document.createElement('input');
+        pom.setAttribute('type', 'file');
+        pom.setAttribute('accept', '.json');
+        pom.addEventListener('change', (event) => {
+            const fileList = event.target.files;
+            const reader = new FileReader();
+            reader.onload = function(event)
+            {
+                const json = event.target.result.toString();
+                try {
+                    JSON.parse(json);
+                }catch(e){
+                    return $alert('Неверный формат файла');
+                }
+
+                localStorage.store = json;
+
+                Store.reload();
+                Settings.hide();
+                $alert('Для применения настроек обновите страницу');
+                if(confirm("Обновить страницу?")) window.location.reload();
+            };
+
+            reader.readAsText(fileList[0]);
+        });
+        if (document.createEvent) {
+            var event = document.createEvent('MouseEvents');
+            event.initEvent('click', true, true);
+            pom.dispatchEvent(event);
+        }
+        else {
+            pom.click();
+        }
+
     });
     $('#settings-btn-save').click(function(){
         var changed = [];
