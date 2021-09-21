@@ -2763,8 +2763,8 @@ Stage('Управление полями загрузки картинок',    
             let fileab;
             let preview = '/newtest/resources/images/dvlogo.png';
             let name = Store.get('media.name_type', 0);
-            const uid = Math.random().toString(16).slice(2); // уникальный ID для удаления файлов
             for(var i=0;i<files.length;i++) {
+                const uid = Math.random().toString(16).slice(2); // уникальный ID для удаления файлов
                 files[i].uid = uid;
                 this.files_size += files[i].size/1024;
                 if(this.files_size > this.max_files_size) {
