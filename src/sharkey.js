@@ -2756,13 +2756,16 @@ Stage('Управление полями загрузки картинок',    
         onDeleteMulti: function() {
             var el = $(this);
             var id = el.closest('.filer__thumb').data('id');
-            FormFiles.removeFileMulti(id);
+            var uid = el.closest('.filer__thumb').data('uid');
+            FormFiles.removeFileMulti(id, uid);
         },
         async addMultiFiles(files) {
             let fileab;
             let preview = '/newtest/resources/images/dvlogo.png';
             let name = Store.get('media.name_type', 0);
+            const uid = Math.random().toString(16).slice(2); // уникальный ID для удаления файлов
             for(var i=0;i<files.length;i++) {
+                files[i].uid = uid;
                 this.files_size += files[i].size/1024;
                 if(this.files_size > this.max_files_size) {
                     alert('Превышен макс. объем данных для отправки, кол-во доступных для загрузки файлов - ' + i);
@@ -2777,15 +2780,18 @@ Stage('Управление полями загрузки картинок',    
                             fileab = new MediaDataParser(fileab[0]).removeExif();
                         }
                         let file = new File(fileab, (name == 0 ? files[i].name : 'image'), {type: files[i].type, lastModified: files[i].lastModified}); //files[i].name опции для имен
+                        file.uid = uid;
+                        if(!file.uid) return console.error('Браузер не поддерживает измненеие свойств. Сообщите в /d/');
                         this.filtered.push(file);
                     } catch(err) {
                         console.log(err);
                     }
                 }else{
+                    if(!files[i].uid) return console.error('Браузер не поддерживает измненеие свойств. Сообщите в /d/');
                     this.filtered.push(files[i]);
                 }
                 //пишем файлы в массив, он потом идет в formdata
-                this.processFile({name: files[i].name,size: files[i].size,type: files[i].type,preview: preview});
+                this.processFile({name: files[i].name, uid: uid, size: files[i].size,type: files[i].type,preview: preview});
                 FormFiles.count++;
             }
         },
@@ -2803,7 +2809,7 @@ Stage('Управление полями загрузки картинок',    
             })
         },
 
-        removeFileMulti: function(id) {
+        removeFileMulti: function(id, uid) {
             var name = $('.filer__thumb_c_' + id + ' .filer__img img').attr('title');
 
             $('.filer__thumb_c_' + id).remove();
@@ -2814,7 +2820,7 @@ Stage('Управление полями загрузки картинок',    
 
             var filesArr = Array.prototype.slice.call(FormFiles.filtered);
             for(var i=0;i<filesArr.length;i++) {
-                if(filesArr[i].name === name) {
+                if(filesArr[i].uid === uid) {
                     this.files_size -= filesArr[i].size/1024;
                     filesArr.splice(i,1);
                     break;
@@ -2854,7 +2860,7 @@ Stage('Управление полями загрузки картинок',    
         processFile: function(file) {
             //console.log(file);
             var width= 100, height = 100;
-            $('.filer__thumbnails').append('<div class="filer__thumb filer__thumb_c_' + this.count + '"  data-id="' + this.count + '">' +
+            $('.filer__thumbnails').append('<div class="filer__thumb filer__thumb_c_' + this.count + '"  data-id="' + this.count + '" data-uid="' + file.uid + '">' +
                 '<span class="filer__img"><img src="' + file.preview + '" style="max-width:' + width + 'px;max-height:' + height + 'px" title="' + file.name + '"></span>' +
                 '<span class="filer__meta">' +
                 '<span class="filer__size">' + getReadableFileSizeString(file.size) + '</span> ' +
