@@ -1554,6 +1554,7 @@ window.MMisc = (function () {
 
             var onerror = function(jqXHR, textStatus) {
                 if(completed) return;
+                clearTimeout(timeoutTimer);
                 attempt++;
                 // Защита от случайного 404 чтоб не помечать тред удалённым сразу, а пару раз перепроверить
                 if(attempt <= window.config.downloadPostsAttempts) {
