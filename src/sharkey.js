@@ -19,7 +19,7 @@ r.isFunction(d)||(g=!0),j&&(g?(b.call(a,d),b=null):(j=b,b=function(a,b,c){return
     window.config.loadCaptchaTimeout = 10000; //таймаут в миллисекундах функции загрузки капчи
     window.config.downloadPostsTimeout = 10000; //updatePostsTimeout таймаут в миллисекундах функции загрузки новых постов с сервера
     window.config.downloadPostsAttempts = 3;  //количество попыток fetchPosts() в случае ошибки
-    window.config.downloadPostsInterval = 5000;  //интервал между попытками fetchPosts() в случае ошибки
+    window.config.downloadPostsInterval = 2000;  //интервал между попытками fetchPosts() в случае ошибки
     window.config.autoUpdate.focusedInterval = 15; //интервал между обновлениями в секундах для вкладки в фокусе
     window.config.autoUpdate.blurredInterval = 35; //интервал между обновлениями в секундах для вкладки НЕ в фокусе
     window.config.autoUpdate.faviconDefault = '<link id="favicon" rel="shortcut icon" href="/favicon.ico"/>'; //Дефолтная иконка
@@ -1457,14 +1457,13 @@ window.MMisc = (function () {
             let completed = false;
             let complete = (obj) => {
                 if(completed) return;
-                completed = true;
+                completed = obj;
                 clearTimeout(timeoutTimer);
                 callback(obj);
             };
             // Защита от зависания запроса
             let timeoutTimer = setTimeout(() => {
                 if(completed) return;
-                completed = true;
                 return complete({error:'server', errorText: 'Таймаут ответа', errorCode: -2});
             }, window.config.downloadPostsTimeout+1000);
 
