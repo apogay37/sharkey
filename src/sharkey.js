@@ -4054,7 +4054,7 @@ Stage('click эвенты',                           'clickevents',  Stage.DOMR
     var selectednum = 0;
 
     $('.captcha__reload').click((e) => {
-        loadCaptcha();
+        loadCaptcha(true);
         e.currentTarget.nextElementSibling.focus();
     });
 
@@ -5928,7 +5928,8 @@ class Captcha2ch {
     }
 
     // Загрузить новую капчу
-    loadCaptcha() {
+    loadCaptcha(force) {
+        if(this.TTL > 1 && !force) return; // Чтоб не дрочить сервер запросами при каждом клике на номер поста/открытие,закрытие форм
         this.requestCaptchaKey();
     }
 
@@ -6074,10 +6075,10 @@ class Captcha2ch {
     }
 }
 
-function loadCaptcha2ch() {
+function loadCaptcha2ch(force) {
     // Создаём инстанс 2ch капчи, только если в настройках выбрана 2ch капча, иначе таймер будет просто так тикать
     if(!window.catcha2chInstance) window.catcha2chInstance = new Captcha2ch();
-    window.catcha2chInstance.loadCaptcha();
+    window.catcha2chInstance.loadCaptcha(force);
 }
 
 
