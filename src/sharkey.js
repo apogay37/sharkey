@@ -5993,11 +5993,11 @@ class Captcha2ch {
             if(delta < wait) {
                 setTimeout(() => {
                     this.busy = false;
-                    this.renderCaptcha(data);
+                    this.renderCaptcha(data, $img);
                 }, wait-delta);
             }else{
                 this.busy = false;
-                this.renderCaptcha(data);
+                this.renderCaptcha(data, $img);
             }
         });
         $img.attr('src', '/api/captcha/2chcaptcha/show?id=' + data.key);
@@ -6007,7 +6007,7 @@ class Captcha2ch {
         $('.captcha__image').html('<span class="captcha__loadtext">Загрузка...</span>');
     }
 
-    renderCaptcha(data) {
+    renderCaptcha(data, $preloaded_img) {
         if(!data.key) {
             if(data.warning) {
                 generateWarning('warning', data.warning, function() {
@@ -6037,10 +6037,9 @@ class Captcha2ch {
         }else{
             $('.captcha__key').val(data.key);
             $('.captcha__val').val('');
-            $('.captcha__image').html(`<img src="/api/captcha/2chcaptcha/show?id=${data.key}">
-            	 <button class="captcha__loadtext js-captcha-load" style="display:none">Обновить</button>
-                 <span class="captcha__timer" style="display:none">60</span>
-                `);
+            $('.captcha__image').html($preloaded_img).append(
+                '<button class="captcha__loadtext js-captcha-load" style="display:none">Обновить</button>\n' +
+                '<span class="captcha__timer" style="display:none">60</span>');
             this.showTTL();
         }
     }
