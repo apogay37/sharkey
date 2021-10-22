@@ -5925,6 +5925,13 @@ class Captcha2ch {
             '}\n' +
             '</style>');
         _.q('.captcha__image').style.position = 'relative'; //moveto css
+
+        // Как минимум 2 человека умудряются ставить пробелы в капчу
+        $('.captcha__val').on('input', function() {
+            let val = $(this).val();
+            let filtered = $(this).val().replace(/[^0-9]/gi, '');
+            if(val != filtered) $(this).val(filtered);
+        });
     }
 
     // Загрузить новую капчу
