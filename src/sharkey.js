@@ -2995,7 +2995,7 @@ Stage('Обработка и отправка постов на сервер',  
                 errCount++;
                 $alert('Ошибка постинга: ' + (data.Reason || data.Error));
                 if (errCount >= 2) {
-                    loadCaptcha();
+                    loadCaptcha(true);
                     errCount = 0
                 }
             }
@@ -3071,7 +3071,7 @@ Stage('Обработка и отправка постов на сервер',  
         $('.oekaki-clear').prop('disabled', true);
         $('.postform__sticker-prev').html(''); // sticker
         $('.sticker-input').remove();
-        loadCaptcha();
+        loadCaptcha(true);
     };
 
     var saveToStorage = function() {
