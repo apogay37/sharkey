@@ -6021,7 +6021,7 @@ class Captcha2ch {
                 generateWarning('warning', data.warning, function() {
                     $("#warningponyal").click(function(){
                         $.get('/api/captcha/message', function() {
-                            loadCaptcha();
+                            loadCaptcha(true);
                         })
                         return false;
                     });
