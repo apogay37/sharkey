@@ -7100,7 +7100,7 @@ class MediaViewer {
 
         if (navigator.userAgent.toLowerCase().indexOf('firefox') > -1 && data.isVideo) {
             //@todo global brower twiks
-            $(this.main).append('<div id="html5videofixer" style="position:absolute;top:0;left:0;width:100%;height: calc(100% - 40px);background: transparent;"></div>');
+            $(this.main).append('<div id="html5videofixer" style="position:absolute;top:0;left:0;width:100%;height: calc(100% - ' + (this.main.dataset.metainfo ? 68 : 50) + 'px);background: transparent;"></div>');
         }
     }
     update(data) {
