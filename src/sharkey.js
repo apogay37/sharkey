@@ -3881,7 +3881,7 @@ Stage('Загрузка автообновления',                'autorefre
 
     window.MAutoUpdate = (function () {
     	var _timeout = document.hasFocus() ? window.config.autoUpdate.focusedInterval : window.config.autoUpdate.blurredInterval;
-    	var _remain = 0;
+    	var _nextCheck = 0;
     	var _currentIcon;
     	var newPosts = [];
 
@@ -3925,9 +3925,10 @@ Stage('Загрузка автообновления',                'autorefre
 
 		        this.interval = setInterval(function(){
 		            var $autorefresh_el = $('.autorefresh-countdown');
-		            _remain--;
-		            if(_remain >= 0) $autorefresh_el.html('через ' + _remain);
-		            if(_remain != 0) return;
+		            let remain = Math.round((_nextCheck - (+new Date)) / 1000);
+		            if(remain < 0) remain = 0;
+		            if(remain >= 0) $autorefresh_el.html('через ' + remain);
+		            if(remain != 0) return;
 		            $autorefresh_el.html(' выполняется...');
 
 		            PostF.updatePosts(function(data){
@@ -3944,7 +3945,7 @@ Stage('Загрузка автообновления',                'autorefre
 		                    }
 		                    if(Favorites.isFavorited(window.thread.id)) Favorites.setLastPost(data.data, window.thread.id);
 		                }
-		              	_remain = _timeout;
+                        _nextCheck = _timeout * 1000 + (+new Date);
 		            });
 
 		        }, 1000);
@@ -3961,15 +3962,22 @@ Stage('Загрузка автообновления',                'autorefre
 		        $('.autorefresh-countdown').html('');
 	    	},
 	    	setNewTimeout: function(newTimeout) {
-                if (newTimeout < 0) _remain = _timeout;
-                _remain = newTimeout;
-                $('.autorefresh-countdown').html('через ' + _remain);
+			    let remain;
+                if (newTimeout < 0) {
+                    remain = _timeout;
+                }else{
+                    remain = newTimeout;
+                }
+                _nextCheck = remain * 1000 + (+new Date);
+
+                $('.autorefresh-countdown').html('через ' + remain);
             },
             setUpdateInterval: function(newInterval) {
                 _timeout = newInterval;
-                if(_remain > _timeout) {
-                    _remain = _timeout;
-                    MAutoUpdate.setNewTimeout(_remain);
+                const remain = Math.round((_nextCheck - (+new Date)) / 1000);
+                if(remain > _timeout) {
+                    _nextCheck = (+new Date) * 1000 + _timeout;
+                    MAutoUpdate.setNewTimeout(_timeout);
                 }
             },
     		reposRedLine: function() {
