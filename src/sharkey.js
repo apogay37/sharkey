@@ -3883,6 +3883,8 @@ Stage('Загрузка автообновления',                'autorefre
     	var _timeout = document.hasFocus() ? window.config.autoUpdate.focusedInterval : window.config.autoUpdate.blurredInterval;
     	var _nextCheck = 0;
     	var _currentIcon;
+    	var busy = false;
+    	var stopped = false;
     	var newPosts = [];
 
     	var setFavicon = function(icon) {
@@ -3905,6 +3907,7 @@ Stage('Загрузка автообновления',                'autorefre
     	var threadDeleted = function() {
     		setFavicon(window.config.autoUpdate.faviconDeleted);
         	$('.autorefresh-countdown').html(' остановлено');
+            stopped = true;
     	}
 
 
@@ -3917,13 +3920,15 @@ Stage('Загрузка автообновления',                'autorefre
 			enabled: false,
     		interval: null,
 			start:  function () {
-				if(this.enabled) return false;
+                if(this.enabled) return false;
+                if(stopped) return false;
 		        this.enabled = true;
 		        var that = this;
 
 		        $('.autorefresh-checkbox').attr('checked','checked');
 
 		        this.interval = setInterval(function(){
+		            if(busy || stopped) return;
 		            var $autorefresh_el = $('.autorefresh-countdown');
 		            let remain = Math.round((_nextCheck - (+new Date)) / 1000);
 		            if(remain < 0) remain = 0;
@@ -3931,7 +3936,9 @@ Stage('Загрузка автообновления',                'autorefre
 		            if(remain != 0) return;
 		            $autorefresh_el.html(' выполняется...');
 
+                    busy = true;
 		            PostF.updatePosts(function(data){
+                        busy = false;
 		                if(data.error) {
 		                    if(data.error == 'server' && data.errorCode == -404) return threadDeleted();
 		                    $alert('Ошибка автообновления: ' + data.errorText);
